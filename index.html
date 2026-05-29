@@ -95,20 +95,57 @@
         .page-btn.active { background-color: #ff9900; color: white; border-color: #ff9900; }
         .page-btn:disabled { background-color: #f9fafb; color: #d1d5db; cursor: not-allowed; border-color: #e5e7eb; }
 
-        /* ✨ [추가] 페이지 전환 애니메이션 효과 (Fade In + Slide Up) */
         @keyframes fadeSlideUp {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        /* 이 클래스가 붙으면 표 내부가 부드럽게 나타납니다 */
-        .fade-animation {
-            animation: fadeSlideUp 0.3s ease-out forwards;
+        .fade-animation { animation: fadeSlideUp 0.3s ease-out forwards; }
+
+        /* ✨ [추가] 우측 하단 고정형 상/하 내비게이션 버튼 UI */
+        .scroll-nav-container {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 9999;
+        }
+        .scroll-nav-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: rgba(45, 50, 56, 0.85); /* 메이플 UI계열의 어두운 다크 그레이색상 */
+            color: #ffffff;
+            border: 2px solid #ff9900; /* 오렌지 테두리로 포인트 */
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: all 0.2s ease-in-out;
+            opacity: 0; /* 기본 상태는 숨김 */
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .scroll-nav-btn span {
+            font-size: 14px;
+            line-height: 1;
+            margin-bottom: 1px;
+        }
+        .scroll-nav-btn:hover {
+            background-color: #ff9900;
+            color: #ffffff;
+            transform: scale(1.08);
+        }
+        /* 스크롤 위치에 의해 클래스가 붙으면 부드럽게 노출됨 */
+        .scroll-nav-btn.show {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
         }
     </style>
 </head>
@@ -138,11 +175,10 @@
             <div style="display: flex; align-items: center; width: 100%;">
                 <label for="huntingGroundSelect">사냥터 선택:</label>
                 <select id="huntingGroundSelect">
-                    <option value="위험한 바다협곡2(=오징어)">위험한 바다협곡2(=오징어)</option>
-                    <option value="켄타우로스의 원탁(=원탁)">켄타우로스의 원탁(=원탁)</option>
-                    <option value="위험한 용의 둥지(=위용둥)">위험한 용의 둥지(=위용둥)</option>
-                    <option value="망가진 용의 둥지(=망용둥)">망가진 용의 둥지(=망용둥)</option>
-                    <option value="큰 둥지 봉우리(=큰둥)">큰 둥지 봉우리(=큰둥)</option>
+                    <option value="켄타우로스의 원탁">켄타우로스의 원탁</option>
+                    <option value="위험한 용의 둥지">위험한 용의 둥지</option>
+                    <option value="망가진 용의 둥지">망가진 용의 둥지</option>
+                    <option value="큰 둥지 봉우리">큰 둥지 봉우리</option>
                     <option value="custom">그 외 직접 사냥터 입력</option>
                 </select>
             </div>
@@ -225,6 +261,11 @@
 
     <div class="pagination-container" id="pagination"></div>
 
+</div>
+
+<div class="scroll-nav-container">
+    <button type="button" class="scroll-nav-btn" id="scrollTopBtn" onclick="scrollToTop()"><span>▲</span>TOP</button>
+    <button type="button" class="scroll-nav-btn" id="scrollDownBtn" onclick="scrollToBottom()"><span>▼</span>DOWN</button>
 </div>
 
 <script>
@@ -509,15 +550,13 @@
 
     const baseHuntingGrounds = ["켄타우로스의 원탁", "위험한 용의 둥지", "망가진 용의 둥지", "큰 둥지 봉우리"];
 
-    // 💡 [수정] 페이지 변경 시 애니메이션 클래스를 주어 모션 실행
     function changePage(pageNumber) { 
         currentPage = pageNumber; 
         renderLogs(); 
         
-        // 표 body 요소를 획득해 애니메이션 트리거
         const tableBody = document.getElementById('expTableBody');
         tableBody.classList.remove('fade-animation');
-        void tableBody.offsetWidth; // 브라우저가 강제로 스타일을 재인식하게 만드는 트릭 (리플로우)
+        void tableBody.offsetWidth; 
         tableBody.classList.add('fade-animation');
     }
 
@@ -629,6 +668,45 @@
             const nextBtn = document.createElement('button'); nextBtn.className = 'page-btn'; nextBtn.innerText = '＞'; nextBtn.disabled = (currentPage === totalPages); nextBtn.onclick = () => changePage(currentPage + 1); paginationWrapper.appendChild(nextBtn);
             const lastBtn = document.createElement('button'); lastBtn.className = 'page-btn'; lastBtn.innerText = '≫'; lastBtn.disabled = (currentPage === totalPages); lastBtn.onclick = () => changePage(totalPages); paginationWrapper.appendChild(lastBtn);
         }
+    }
+
+    // ✨ [추가] 실시간 스크롤 감지 및 이동 제어 스크립트
+    const topBtn = document.getElementById('scrollTopBtn');
+    const downBtn = document.getElementById('scrollDownBtn');
+
+    window.addEventListener('scroll', function() {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const scrollHeight = document.documentElement.scrollHeight;
+        const clientHeight = document.documentElement.clientHeight;
+        
+        // 브라우저마다 생길 수 있는 오차 범위를 고려해 바닥면 5px 여유 부여
+        const isAtTop = scrollTop <= 10;
+        const isAtBottom = (scrollTop + clientHeight) >= (scrollHeight - 5);
+
+        if (isAtTop) {
+            // 맨 위일 때는 TOP 숨기고 DOWN만 표시
+            topBtn.classList.remove('show');
+            downBtn.classList.add('show');
+        } else if (isAtBottom) {
+            // 맨 아래일 때는 DOWN 숨기고 TOP만 표시
+            downBtn.classList.remove('show');
+            topBtn.classList.add('show');
+        } else {
+            // 중간 지점일 때는 둘 다 표시
+            topBtn.classList.add('show');
+            downBtn.classList.add('show');
+        }
+    });
+
+    // 화면 로드 시 초기 상태 세팅 (혹시 스크롤이 없는 상태거나 맨 위인 경우 대응)
+    window.dispatchEvent(new Event('scroll'));
+
+    function scrollToTop() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function scrollToBottom() {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     }
 </script>
 
