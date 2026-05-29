@@ -208,6 +208,27 @@
         }
         .modal-table-wrapper table { margin-top: 0; }
         .modal-table-wrapper th { position: sticky; top: 0; z-index: 10; background-color: #f1f5f9; }
+
+
+        /* ⏱️ 사냥 타이머 바 디자인 */
+        .timer-bar {
+            background: #fff8f0;
+            border: 1px solid #ffe3c2;
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .timer-info { display: flex; align-items: center; gap: 10px; }
+        .timer-lbl { font-size: 13px; font-weight: bold; color: #666; }
+        .timer-num { font-family: 'Courier New', monospace; font-size: 26px; font-weight: bold; color: #ff9900; }
+        .timer-btns { display: flex; gap: 6px; }
+        .t-btn { padding: 6px 14px; font-size: 12px; font-weight: bold; border-radius: 4px; cursor: pointer; border: 1px solid transparent; }
+        .t-btn.start { background-color: #e6f4ea; color: #137333; border-color: #ceead6; }
+        .t-btn.pause { background-color: #fef7e0; color: #b06000; border-color: #feebc8; }
+        .t-btn.stop { background-color: #fce8e6; color: #c5221f; border-color: #fad2cf; }
     </style>
 </head>
 <body>
@@ -217,6 +238,17 @@
     <p style="color:#666; font-size:13px;">※ 모든 기록은 브라우저 내부에 저장되므로, 인터넷 쿠키/사용 기록을 삭제하면 로그가 함께 지워질 수 있으니 주의해 주세요!</p>
     <hr>
 
+    <div class="timer-bar">
+        <div class="timer-info">
+            <span class="timer-lbl">⏱️ 사냥 타이머 (60분 기준):</span>
+            <span class="timer-num" id="clockDisplay">60:00</span>
+        </div>
+        <div class="timer-btns">
+            <button type="button" class="t-btn start" id="btnStart" onclick="runningTimer()">시작</button>
+            <button type="button" class="t-btn pause" id="btnPause" onclick="pausingTimer()" style="display:none;">일시정지</button>
+            <button type="button" class="t-btn stop" onclick="stoppingTimer()">끄기</button>
+        </div>
+    </div>
     <h3>📝 사냥 기록 입력</h3>
     <form id="expForm">
         <div class="form-group">
@@ -870,7 +902,110 @@
         document.getElementById('modalHourlyAverage').innerText = hourlyAverageText;
         
         toggleModal(true);
+
+        
     }
+
+// =========================================================
+// ⏱️ 충돌 절대 방지형 메이플 사냥 타이머 독립 모듈
+// =========================================================
+(function() {
+    let timerId = null;
+    const MAX_SEC = 60 * 60; // 60분
+    let currentSec = MAX_SEC;
+
+    // 알람 소리 재생 (오디오 콘텍스트 에러 방지 내장)
+    function triggerAlarm() {
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(659.25, ctx.currentTime); // 미
+            osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.15); // 라
+            
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc.stop(ctx.currentTime + 0.6);
+        } catch(e) { console.error("오디오 에러:", e); }
+    }
+
+    // 화면 시계 표시 동기화
+    function redrawClock() {
+        const el = document.getElementById('clockDisplay');
+        if (!el) return;
+        const m = Math.floor(currentSec / 60);
+        const s = currentSec % 60;
+        el.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    // 타이머 상태 초기화
+    function resetTimerState() {
+        clearInterval(timerId);
+        timerId = null;
+        currentSec = MAX_SEC;
+        redrawClock();
+        
+        const sBtn = document.getElementById('btnStart');
+        const pBtn = document.getElementById('btnPause');
+        if(sBtn) sBtn.style.display = 'inline-block';
+        if(pBtn) pBtn.style.display = 'none';
+    }
+
+    // 글로벌 스코프에 함수 강제 등록 (HTML onclick과 무조건 연결되도록 보장)
+    window.runningTimer = function() {
+        if (timerId) return;
+        
+        const sBtn = document.getElementById('btnStart');
+        const pBtn = document.getElementById('btnPause');
+        if(sBtn) sBtn.style.display = 'none';
+        if(pBtn) pBtn.style.display = 'inline-block';
+
+        timerId = setInterval(() => {
+            if (currentSec > 0) {
+                currentSec--;
+                redrawClock();
+            } else {
+                clearInterval(timerId);
+                timerId = null;
+                triggerAlarm();
+                alert("⏰ 60분 사냥 타이머가 완료되었습니다!");
+                
+                const inputTime = document.getElementById('huntingTime');
+                if(inputTime) inputTime.value = 60;
+                resetTimerState();
+            }
+        }, 1000);
+    };
+
+    window.pausingTimer = function() {
+        clearInterval(timerId);
+        timerId = null;
+        const sBtn = document.getElementById('btnStart');
+        const pBtn = document.getElementById('btnPause');
+        if(sBtn) sBtn.style.display = 'inline-block';
+        if(pBtn) pBtn.style.display = 'none';
+    };
+
+    window.stoppingTimer = function() {
+        if (currentSec === MAX_SEC) return;
+        if (confirm("타이머를 종료하시겠습니까?")) {
+            const passed = MAX_SEC - currentSec;
+            const inputTime = document.getElementById('huntingTime');
+            if(inputTime) inputTime.value = Math.ceil(passed / 60);
+            resetTimerState();
+        }
+    };
+})();
 </script>
 
 </body>
